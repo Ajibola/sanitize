@@ -1,8 +1,8 @@
 package sanitize
 
 import (
-	"testing"
 	"strings"
+	"testing"
 )
 
 func TestSanitizeRendersDoctypeCorrectly(t *testing.T) {
@@ -145,7 +145,6 @@ func TestStripComments(t *testing.T) {
 	}
 }
 
-
 func TestCanSanitizeRemoveDocumentFragment(t *testing.T) {
 	htmlDoc := `<div class="my-class" style="width:100%;"><ul><li>element</li></ul><b>bold</b></div>`
 	expectedOutput := `<div class="my-class"><ul></ul><b>bold</b></div>`
@@ -202,7 +201,6 @@ func TestCanSanitizeRemoveDocumentFragmentHeadTypeInline(t *testing.T) {
 		t.Errorf("failed: %s != %s", output, expectedOutput)
 	}
 }
-
 
 func TestCanSanitizeUnwrapDocumentFragment(t *testing.T) {
 	htmlDoc := `<div class="my-class" style="width:100%;"><ul><li>element</li></ul><b>bold</b></div>`

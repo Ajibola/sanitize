@@ -1,40 +1,41 @@
 package sanitize
 
 import (
-	"io"
 	"bytes"
-	"code.google.com/p/go.net/html"
-	"errors"
 	"encoding/json"
+	"errors"
+	"io"
 	"strings"
+
+	"golang.org/x/net/html"
 )
 
 type Whitelist struct {
-	StripWhitespace	bool				`json:"stripWhitespace"`
-	StripComments 	bool				`json:"stripComments"`
-	Elements		map[string][]string	`json:"elements"`
+	StripWhitespace bool                `json:"stripWhitespace"`
+	StripComments   bool                `json:"stripComments"`
+	Elements        map[string][]string `json:"elements"`
 }
 
 func (w *Whitelist) AddElement(elementTag string, attributes []string) {
 	w.Elements[elementTag] = attributes
 }
 
-func (w *Whitelist) HasElement(elementTag string) (bool) {
+func (w *Whitelist) HasElement(elementTag string) bool {
 	_, ok := w.Elements[elementTag]
 	return ok
 }
 
-func (w *Whitelist) GetAttributesForElement(elementTag string) ([]string) {
+func (w *Whitelist) GetAttributesForElement(elementTag string) []string {
 	val, _ := w.Elements[elementTag]
 	return val
 }
 
-func (w *Whitelist) HasAttributeForElement(elementTag string, attributeName string) (bool) {
+func (w *Whitelist) HasAttributeForElement(elementTag string, attributeName string) bool {
 	val, ok := w.Elements[elementTag]
 	if !ok {
 		return false
 	}
-	for _, attribute := range(val) {
+	for _, attribute := range val {
 		if attribute == attributeName {
 			return true
 		}
@@ -53,7 +54,7 @@ func (w *Whitelist) sanitizeAttributes(n *html.Node) {
 	attributes := make([]html.Attribute, len(n.Attr))
 
 	i := 0
-	for _, attribute := range(n.Attr) {
+	for _, attribute := range n.Attr {
 		if w.HasAttributeForElement(n.Data, attribute.Key) {
 			attributes[i] = attribute
 			i += 1
@@ -67,7 +68,7 @@ func (w *Whitelist) sanitizeAttributes(n *html.Node) {
 // with the StripComments configuration
 func (w *Whitelist) handleComment(n *html.Node) {
 	if w.StripComments {
-			if n.Parent != nil {
+		if n.Parent != nil {
 			n.Parent.RemoveChild(n)
 		}
 	}
@@ -88,21 +89,21 @@ func (w *Whitelist) handleText(n *html.Node) {
 // Returns the return value of handleElement:
 // a boolean describing whether the children
 // of the node should be further sanitized (ie. not skipped).
-func (w *Whitelist) sanitizeNode(n *html.Node, handleElement func(*html.Node) (bool)) (error) {
+func (w *Whitelist) sanitizeNode(n *html.Node, handleElement func(*html.Node) bool) error {
 	switch n.Type {
 	case html.ErrorNode:
 		return errors.New("Unable to parse HTML")
-  	case html.TextNode:
-  		w.handleText(n)
-  	case html.DocumentNode:
-  	case html.ElementNode:
-  		if (!handleElement(n)) {
-  			return nil
-  		}
-  		w.sanitizeAttributes(n)
-  	case html.CommentNode:
-  		w.handleComment(n)
-  	case html.DoctypeNode:
+	case html.TextNode:
+		w.handleText(n)
+	case html.DocumentNode:
+	case html.ElementNode:
+		if !handleElement(n) {
+			return nil
+		}
+		w.sanitizeAttributes(n)
+	case html.CommentNode:
+		w.handleComment(n)
+	case html.DoctypeNode:
 	}
 
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -119,20 +120,20 @@ func (w *Whitelist) sanitizeNode(n *html.Node, handleElement func(*html.Node) (b
 // removing any element nodes that are not whitelisted
 // and and removing any attributes that are not whitelisted
 // from a given element node
-func (w *Whitelist) sanitizeRemove(n *html.Node) (error) {
-	return w.sanitizeNode(n, func(n *html.Node) (bool) {
-  		if !w.HasElement(n.Data) {
-  			if n.Parent != nil {
-	  			nextSibling := n.NextSibling
-  				n.Parent.RemoveChild(n)
+func (w *Whitelist) sanitizeRemove(n *html.Node) error {
+	return w.sanitizeNode(n, func(n *html.Node) bool {
+		if !w.HasElement(n.Data) {
+			if n.Parent != nil {
+				nextSibling := n.NextSibling
+				n.Parent.RemoveChild(n)
 
-  				// reset next sibling to support continuation
-  				// of linked-list style traversal of parent node's children
-  				n.NextSibling = nextSibling
-  			}
-  			return false
-  		}
-  		return true
+				// reset next sibling to support continuation
+				// of linked-list style traversal of parent node's children
+				n.NextSibling = nextSibling
+			}
+			return false
+		}
+		return true
 	})
 }
 
@@ -144,7 +145,7 @@ func (w *Whitelist) SanitizeRemove(reader io.Reader) (string, error) {
 	if err != nil {
 		return buffer.String(), err
 	}
-	
+
 	err = w.sanitizeRemove(doc)
 	if err != nil {
 		return buffer.String(), err
@@ -182,8 +183,8 @@ func (w *Whitelist) SanitizeRemoveFragment(reader io.Reader) (string, error) {
 // sanitizeUnwrap traverses pre-order over the nodes, reattaching
 // the whitelisted children of any element nodes that are not
 // whitelisted to the parent of the unwhitelisted node
-func (w *Whitelist) sanitizeUnwrap(n *html.Node) (error) {
-	return w.sanitizeNode(n, func(n *html.Node) (bool) {
+func (w *Whitelist) sanitizeUnwrap(n *html.Node) error {
+	return w.sanitizeNode(n, func(n *html.Node) bool {
 		if w.HasElement(n.Data) || n.Parent == nil {
 			return true
 		}
@@ -193,14 +194,14 @@ func (w *Whitelist) sanitizeUnwrap(n *html.Node) (error) {
 		for c := n.FirstChild; c != nil; {
 			nodeToUnwrap := c
 			c = c.NextSibling
-			
+
 			n.RemoveChild(nodeToUnwrap)
 			n.Parent.InsertBefore(nodeToUnwrap, insertBefore)
 		}
 		n.Parent.RemoveChild(n)
 
 		// reset next sibling to support continuation
-  		// of linked-list style traversal of parent node's children
+		// of linked-list style traversal of parent node's children
 		n.NextSibling = firstChild
 		return false
 	})
@@ -214,7 +215,7 @@ func (w *Whitelist) SanitizeUnwrap(reader io.Reader) (string, error) {
 	if err != nil {
 		return buffer.String(), err
 	}
-	
+
 	err = w.sanitizeUnwrap(doc)
 	if err != nil {
 		return buffer.String(), err
@@ -224,7 +225,6 @@ func (w *Whitelist) SanitizeUnwrap(reader io.Reader) (string, error) {
 
 	return buffer.String(), err
 }
-
 
 // unwrap non whitelisted elements in provided document fragment
 //
@@ -253,8 +253,8 @@ func (w *Whitelist) SanitizeUnwrapFragment(reader io.Reader) (string, error) {
 // render for every child of the node provided,
 // render that node into the provided buffer
 // after performing the provided function on it
-func renderForEachChild(n *html.Node, buffer *bytes.Buffer, fn func(*html.Node) (error)) (error) {
-	for c := n.FirstChild; c != nil; c = c.NextSibling{
+func renderForEachChild(n *html.Node, buffer *bytes.Buffer, fn func(*html.Node) error) error {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		err := fn(c)
 		if err != nil {
 			return err

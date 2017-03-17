@@ -1,8 +1,8 @@
 package sanitize
 
-import(
-	"os"
+import (
 	"encoding/json"
+	"os"
 )
 
 // Load a new whitelist from a JSON file
